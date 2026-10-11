@@ -83,15 +83,19 @@ public class StoreProductController {
         if (variants == null || variants.isEmpty()) {
             Object priceObj = body.get("price");
             long priceMinor = priceObj instanceof Number n ? n.longValue() : 0;
-            inputs = List.of(new VariantInput("DEFAULT", null, null, null, priceMinor, null));
+            inputs = List.of(new VariantInput(null, "DEFAULT", null, null, null, priceMinor, null, 0));
         } else {
             inputs = variants.stream().map(v -> new VariantInput(
+                    // BUG-29 fix: pass through the variant id (update matches on it)
+                    // and stock (persisted to the default location's inventory level).
+                    (String) v.get("id"),
                     (String) v.getOrDefault("sku", ""),
                     (String) v.get("option1"),
                     (String) v.get("option2"),
                     (String) v.get("option3"),
                     v.get("price") instanceof Number n ? n.longValue() : 0,
-                    v.get("compareAt") instanceof Number n ? n.longValue() : null
+                    v.get("compareAt") instanceof Number n ? n.longValue() : null,
+                    v.get("stock") instanceof Number n ? n.intValue() : 0
             )).collect(Collectors.toList());
         }
         List<String> images = (List<String>) body.get("images");
@@ -108,6 +112,8 @@ public class StoreProductController {
             m.put("option1", v.option1());
             m.put("option2", v.option2());
             m.put("option3", v.option3());
+            // BUG-29 fix: return the persisted stock so the list/form show real numbers.
+            m.put("stock", v.stock());
             return m;
         }).collect(Collectors.toList());
         Map<String, Object> m = new LinkedHashMap<>();

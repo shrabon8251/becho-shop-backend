@@ -8,6 +8,9 @@ import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -109,6 +112,26 @@ public class StoreDiscountController {
         if (limitObj instanceof Number n) d.setUsageLimit(n.intValue());
         // BUG-46 fix: title is NOT NULL in DB; default to code if frontend omits it.
         if (d.getTitle() == null || d.getTitle().isBlank()) d.setTitle(d.getCode());
+        // BUG-34 fix: starts_at is NOT NULL in the DB but was never set — every
+        // discount create died with 500. The frontend sends epoch millis (or omits
+        // the field); default startsAt to now so "always active" discounts work.
+        LocalDateTime startsAt = toDateTime(body.get("startsAt"));
+        LocalDateTime endsAt = toDateTime(body.get("endsAt"));
+        if (startsAt != null) d.setStartsAt(startsAt);
+        else if (d.getStartsAt() == null) d.setStartsAt(LocalDateTime.now());
+        if (endsAt != null) d.setEndsAt(endsAt);
+    }
+
+    /** Frontend sends schedule bounds as epoch millis (or omits them). */
+    private static LocalDateTime toDateTime(Object o) {
+        if (o instanceof Number n) {
+            return LocalDateTime.ofInstant(Instant.ofEpochMilli(n.longValue()), ZoneOffset.UTC);
+        }
+        return null;
+    }
+
+    private static Long toMillis(LocalDateTime t) {
+        return t == null ? null : t.toInstant(ZoneOffset.UTC).toEpochMilli();
     }
 
     private Map<String, Object> toFrontend(Discount d) {
@@ -125,6 +148,9 @@ public class StoreDiscountController {
         m.put("used", d.getUsedCount());
         m.put("minimum", d.getMinimumSubtotalMinor());
         m.put("usageLimit", d.getUsageLimit());
+        // BUG-34 fix: return the schedule so the form shows it on reload.
+        m.put("startsAt", toMillis(d.getStartsAt()));
+        m.put("endsAt", toMillis(d.getEndsAt()));
         return m;
     }
 }

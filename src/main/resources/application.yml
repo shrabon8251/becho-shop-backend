@@ -127,5 +127,10 @@ logging:
     com.becho: INFO
     org.hibernate.SQL: WARN
 
+billing:
+  merchant:
+    bkash: ${MERCHANT_BKASH:}
+    nagad: ${MERCHANT_NAGAD:}
+    rocket: ${MERCHANT_ROCKET:}
 
 

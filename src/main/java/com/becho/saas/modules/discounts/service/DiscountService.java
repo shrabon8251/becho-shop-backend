@@ -90,7 +90,12 @@ public class DiscountService {
 
     @Transactional
     public Discount create(Discount d) {
-        d.setCode(d.getCode().trim().toUpperCase());
+        // BUG-34 fix: null-safe code — a missing code used to NPE here (500).
+        // The storefront controller normally defaults it, but never trust the caller.
+        String code = d.getCode() == null || d.getCode().isBlank()
+                ? "AUTO-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase()
+                : d.getCode().trim().toUpperCase();
+        d.setCode(code);
         return discounts.save(d);
     }
 

@@ -6,6 +6,8 @@ import com.becho.saas.modules.tenancy.entity.User;
 import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import com.becho.saas.modules.tenancy.repository.StoreStaffRepository;
 import com.becho.saas.modules.tenancy.repository.UserRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,15 +33,17 @@ public class StoreStaffController {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final StoreScope scope;
+    private final ObjectMapper objectMapper;
 
     public StoreStaffController(StoreStaffRepository staff, StoreRepository stores,
                                 UserRepository users, PasswordEncoder passwordEncoder,
-                                StoreScope scope) {
+                                StoreScope scope, ObjectMapper objectMapper) {
         this.staff = staff;
         this.stores = stores;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.scope = scope;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -53,6 +57,7 @@ public class StoreStaffController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
+    @Transactional
     public Map<String, Object> create(@PathVariable String storeId,
                                       @RequestBody Map<String, Object> body) {
         Long sid = scope.require(storeId);
@@ -70,6 +75,11 @@ public class StoreStaffController {
             // Staff should change it after first login (Profile settings).
             user.setPasswordHash(passwordEncoder.encode("welcome123"));
             user.setStatus("active");
+            // BUG-1 fix: the inviting owner/admin already validated this email address,
+            // and the temp password is communicated in the invite UI — so the account
+            // must not be stuck behind "verify your email first" (no verification
+            // email is sent in this flow). Mark verified on creation.
+            user.setEmailVerifiedAt(java.time.LocalDateTime.now());
             users.save(user);
         }
 
@@ -89,8 +99,10 @@ public class StoreStaffController {
         member.setStatus("active");
         Object perms = body.get("permissions");
         if (perms instanceof List<?> l) {
-            member.setPermissions(String.join(",", l.stream().map(Object::toString).toList()));
+            member.setPermissions(toPermissionsJson(l));
         }
+        // BUG-1 fix: @Transactional above makes user+membership atomic — a failure
+        // can no longer leave a half-created user row in limbo.
         return toFrontend(staff.save(member));
     }
 
@@ -121,7 +133,7 @@ public class StoreStaffController {
         if (newRole != null) member.setRole(newRole);
         Object perms = body.get("permissions");
         if (perms instanceof List<?> l) {
-            member.setPermissions(String.join(",", l.stream().map(Object::toString).toList()));
+            member.setPermissions(toPermissionsJson(l));
         }
         if (body.get("name") != null && member.getUser() != null) {
             member.getUser().setFullName((String) body.get("name"));
@@ -149,6 +161,29 @@ public class StoreStaffController {
         }
         member.setStatus("inactive");
         staff.save(member);
+    }
+
+    /**
+     * BUG-1 fix: the permissions column is JSON — a comma-joined "a,b" string is
+     * invalid JSON and MySQL rejects the insert with 500. Serialize as a real
+     * JSON array instead.
+     */
+    private String toPermissionsJson(List<?> perms) {
+        try {
+            return objectMapper.writeValueAsString(perms.stream().map(Object::toString).toList());
+        } catch (Exception e) {
+            throw ApiException.badRequest("BAD_PERMISSIONS", "Invalid permissions payload");
+        }
+    }
+
+    /** Parses the JSON permissions array; falls back to comma-split for legacy rows. */
+    private List<String> parsePermissions(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of(raw.split(","));
+        }
     }
 
     /** The caller's role for the scoped store, from the JWT authorities. */
@@ -184,8 +219,9 @@ public class StoreStaffController {
         out.put("name", u != null ? u.getFullName() : "");
         out.put("email", u != null ? u.getEmail() : "");
         out.put("role", toFrontendRole(m.getRole()));
-        if (m.getPermissions() != null && !m.getPermissions().isBlank()) {
-            out.put("permissions", List.of(m.getPermissions().split(",")));
+        List<String> perms = parsePermissions(m.getPermissions());
+        if (!perms.isEmpty()) {
+            out.put("permissions", perms);
         }
         out.put("status", m.getStatus());
         return out;
