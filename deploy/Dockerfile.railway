@@ -1,0 +1,36 @@
+# Railway-ready image for the Becho backend.
+#
+# Unlike deploy/Dockerfile (VPS), this one BUILDS the JAR inside Docker,
+# so Railway can build straight from git — no local `mvn package` needed.
+#
+# Railway settings:
+#   - Build context : repository root (~/workspace/shop-saas-backend)
+#   - Dockerfile path: deploy/Dockerfile.railway
+#   - Railway injects $PORT at runtime; the app listens on it (8080 locally).
+
+# ---- build stage: Maven + Java 25 ----
+FROM maven:3.10-amazoncorretto-25-debian AS build
+WORKDIR /build
+
+# Copy pom first so dependency downloads are cached between rebuilds.
+COPY pom.xml .
+RUN mvn -q -DskipTests dependency:go-offline || true
+
+COPY src ./src
+RUN mvn -DskipTests package
+
+# ---- runtime stage: Java 25 JRE only ----
+FROM eclipse-temurin:25-jre
+
+RUN useradd -m -u 10001 appuser
+WORKDIR /app
+
+COPY --from=build /build/target/becho-saas-*.jar app.jar
+RUN chown appuser:appuser /app/app.jar
+USER appuser
+
+# Flyway migrations (src/main/resources/db/migration) run automatically on
+# startup (spring.flyway.enabled=true). Needs DB_URL/DB_USER/DB_PASSWORD env.
+#
+# Railway assigns a dynamic $PORT per service; honor it, default 8080.
+ENTRYPOINT ["sh","-c","java -Dserver.port=${PORT:-8080} -Djava.net.preferIPv4Stack=true -jar /app/app.jar"]

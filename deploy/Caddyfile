@@ -1,0 +1,8 @@
+# Caddy reverse proxy. Gets a free Let's Encrypt certificate automatically
+# for {$API_DOMAIN} on first start and renews it forever.
+# The storefront itself lives on Cloudflare Pages/Vercel, so only the
+# backend API needs proxying here.
+
+{$API_DOMAIN} {
+	reverse_proxy app:8080
+}

@@ -1,0 +1,126 @@
+# Default profile — override secrets via environment variables, never commit them.
+spring:
+  application:
+    name: becho-saas
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/becho?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8&allowPublicKeyRetrieval=true}
+    username: ${DB_USER:becho_app}
+    password: ${DB_PASSWORD:change-me}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+  jpa:
+    hibernate:
+      ddl-auto: validate   # schema is owned by Flyway migrations
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    # SMTP auth credentials (env only — never commit real values).
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+  # Google OAuth is wired up when GOOGLE_CLIENT_ID/SECRET are provided.
+  # (Left disabled by default; frontend currently uses its own sign-in mock.)
+  # security:
+  #   oauth2:
+  #     client:
+  #       registration:
+  #         google:
+  #           client-id: ${GOOGLE_CLIENT_ID:}
+  #           client-secret: ${GOOGLE_CLIENT_SECRET:}
+  #           scope: openid, email, profile
+
+becho:
+  seed:
+    demo: ${BECHO_SEED_DEMO:false}
+    demo-store-id: ${BECHO_SEED_DEMO_STORE_ID:}
+
+
+
+  mail:
+    # Sender address for auth/contact emails (via Brevo API).
+    from: ${MAIL_FROM:noreply@becho.com.bd}
+  settings:
+    # AES-256 key for encrypting courier/SMS API keys in store settings.
+    # REQUIRED in production — without it, keys are stored in plaintext.
+    key: ${BECHO_SETTINGS_KEY:}
+  google:
+    # Google Identity Services client id. The /auth/google endpoint verifies
+    # the ID token's audience against this value. Blank = Google sign-in
+    # disabled (endpoint returns 503 instead of issuing tokens).
+    client-id: ${GOOGLE_CLIENT_ID:}
+  contact:
+    # Where contact-form notifications go. Blank = just store the message.
+    notify-to: ${CONTACT_NOTIFY_TO:}
+  platform:
+    # Email of the platform operator. That user gets ROLE_PLATFORM_ADMIN
+    # (PUT /platform/landing incl. theme show/hide, /platform/plans,
+    # announcements, tickets, impersonate). Blank = those stay 403 for everyone.
+    admin-email: ${PLATFORM_ADMIN_EMAIL:}
+  sms:
+    # SMS provider name. Blank = log OTPs server-side (dev/demo mode).
+    provider: ${SMS_PROVIDER:}
+  payments:
+    sslcommerz:
+      # Wired from env — the SslCommerzProvider reads these @Values.
+      # Blank = SSLCommerz disabled (initiate returns 503).
+      store-id: ${SSLCZ_STORE_ID:}
+      store-password: ${SSLCZ_STORE_PASSWORD:}
+      sandbox: ${SSLCZ_SANDBOX:true}
+  storefront:
+    # Public storefront base URL for gateway return links (success/fail/cancel).
+    url: ${STOREFRONT_URL:}
+  jwt:
+    # No usable default: the app refuses to boot without a real secret.
+    # Set JWT_SECRET in the environment (.env). See deploy/.env.example.
+    secret: ${JWT_SECRET:}
+    access-ttl-minutes: 30
+    refresh-ttl-days: 14
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  r2:
+    # Cloudflare R2 (S3-compatible) object storage for product images.
+    # All values come from the environment — Md creates the bucket + API
+    # token in the Cloudflare dashboard. Blank = dev mode (uploads return 503).
+    account-id: ${R2_ACCOUNT_ID:}
+    access-key-id: ${R2_ACCESS_KEY_ID:}
+    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+    bucket: ${R2_BUCKET:}
+    public-url: ${R2_PUBLIC_URL:}
+    # Optional S3 endpoint override for non-R2 S3-compatible storage
+    # (e.g. Supabase Storage — no card needed). When set, R2_ACCOUNT_ID
+    # is not required. Example: https://xyz.supabase.co/storage/v1/s3
+    endpoint: ${R2_ENDPOINT:}
+    # Signing region: "auto" for R2, "us-east-1" for Supabase.
+    region: ${R2_REGION:auto}
+
+logging:
+  level:
+    com.becho: INFO
+    org.hibernate.SQL: WARN
+
+
+
