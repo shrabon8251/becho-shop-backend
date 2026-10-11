@@ -40,6 +40,8 @@ public class PublicStorefrontController {
     private final com.becho.saas.modules.discounts.repository.DiscountRepository discounts;
     private final com.becho.saas.modules.platform.repository.StoreAppsConfigRepository appsConfigs;
     private final com.becho.saas.modules.catalog.repository.CollectionRepository collections;
+    private final com.becho.saas.modules.catalog.repository.BundleRepository bundles;
+    private final com.becho.saas.modules.platform.repository.PageRepository pages;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public PublicStorefrontController(
@@ -50,6 +52,8 @@ public class PublicStorefrontController {
             com.becho.saas.modules.discounts.repository.DiscountRepository discounts,
             com.becho.saas.modules.platform.repository.StoreAppsConfigRepository appsConfigs,
             com.becho.saas.modules.catalog.repository.CollectionRepository collections,
+            com.becho.saas.modules.catalog.repository.BundleRepository bundles,
+            com.becho.saas.modules.platform.repository.PageRepository pages,
             org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.catalogService = catalogService;
         this.settingsCache = settingsCache;
@@ -58,6 +62,8 @@ public class PublicStorefrontController {
         this.discounts = discounts;
         this.appsConfigs = appsConfigs;
         this.collections = collections;
+        this.bundles = bundles;
+        this.pages = pages;
         this.jdbc = jdbc;
     }
 
@@ -233,5 +239,40 @@ public class PublicStorefrontController {
                     Long.class, c.getId()).stream().map(String::valueOf).toList());
             return m;
         }).collect(Collectors.toList());
+    }
+
+    // ---------------------------------------------------------------- bundles (public)
+
+    @GetMapping("/bundles")
+    public List<Map<String, Object>> bundles(@PathVariable String storeId) {
+        Long sid = sid(storeId);
+        return bundles.findByStoreIdOrderByCreatedAtDesc(sid).stream()
+                .filter(b -> b.isActive())
+                .map(b -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", b.getId().toString());
+                    m.put("name", b.getName());
+                    m.put("items", b.getItems());
+                    m.put("priceMinor", b.getPriceMinor());
+                    m.put("image", b.getImage());
+                    return m;
+                }).collect(Collectors.toList());
+    }
+
+    // ---------------------------------------------------------------- posts/blog (public, published only)
+
+    @GetMapping("/posts")
+    public List<Map<String, Object>> posts(@PathVariable String storeId) {
+        Long sid = sid(storeId);
+        return pages.findByStoreIdAndDeletedAtIsNullOrderByCreatedAtDesc(sid).stream()
+                .filter(p -> "published".equals(p.getStatus()))
+                .map(p -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", p.getId().toString());
+                    m.put("title", p.getTitle());
+                    m.put("slug", p.getSlug());
+                    m.put("body", p.getBody());
+                    return m;
+                }).collect(Collectors.toList());
     }
 }
