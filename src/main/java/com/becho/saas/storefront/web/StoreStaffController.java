@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -66,7 +65,10 @@ public class StoreStaffController {
             user = new User();
             user.setEmail(email);
             user.setFullName(name);
-            user.setPasswordHash(passwordEncoder.encode("invite-" + UUID.randomUUID()));
+            // The invite UI tells the new staff their password is "welcome123",
+            // so the account must actually use it (a random password = login impossible).
+            // Staff should change it after first login (Profile settings).
+            user.setPasswordHash(passwordEncoder.encode("welcome123"));
             user.setStatus("active");
             users.save(user);
         }

@@ -9,6 +9,7 @@ import com.becho.saas.modules.tenancy.repository.*;
 import com.becho.saas.modules.auth.service.VerificationService;
 import com.becho.saas.security.GoogleIdTokenVerifier;
 import com.becho.saas.security.JwtService;
+import io.jsonwebtoken.Claims;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -192,7 +193,13 @@ public class AuthService {
      */
     @Transactional
     public TokenResponse refresh(RefreshRequest req) {
-        var claims = jwtService.parse(req.refreshToken());
+        final Claims claims;
+        try {
+            claims = jwtService.parse(req.refreshToken());
+        } catch (Exception e) {
+            // Garbage/expired/tampered token must be 401, never 500.
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "BAD_TOKEN", "Invalid refresh token");
+        }
         if (!"refresh".equals(claims.get("type"))) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "BAD_TOKEN", "Not a refresh token");
         }
