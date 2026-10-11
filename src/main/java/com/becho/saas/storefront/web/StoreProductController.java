@@ -94,7 +94,8 @@ public class StoreProductController {
                     v.get("compareAt") instanceof Number n ? n.longValue() : null
             )).collect(Collectors.toList());
         }
-        return new CreateProductRequest(title, description, status, productType, vendor, inputs);
+        List<String> images = (List<String>) body.get("images");
+        return new CreateProductRequest(title, description, status, productType, vendor, inputs, images);
     }
 
     private Map<String, Object> toFrontend(ProductDto p) {

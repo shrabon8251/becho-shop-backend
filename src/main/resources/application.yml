@@ -1,4 +1,9 @@
 # Default profile — override secrets via environment variables, never commit them.
+
+server:
+  port: ${PORT:8080}
+
+
 spring:
   application:
     name: becho-saas

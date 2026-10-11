@@ -40,6 +40,7 @@ public class PublicStorefrontController {
     private final com.becho.saas.modules.discounts.repository.DiscountRepository discounts;
     private final com.becho.saas.modules.platform.repository.StoreAppsConfigRepository appsConfigs;
     private final com.becho.saas.modules.catalog.repository.CollectionRepository collections;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public PublicStorefrontController(
             CatalogService catalogService,
@@ -48,7 +49,8 @@ public class PublicStorefrontController {
             ThemeRepository themes,
             com.becho.saas.modules.discounts.repository.DiscountRepository discounts,
             com.becho.saas.modules.platform.repository.StoreAppsConfigRepository appsConfigs,
-            com.becho.saas.modules.catalog.repository.CollectionRepository collections) {
+            com.becho.saas.modules.catalog.repository.CollectionRepository collections,
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.catalogService = catalogService;
         this.settingsCache = settingsCache;
         this.stores = stores;
@@ -56,6 +58,7 @@ public class PublicStorefrontController {
         this.discounts = discounts;
         this.appsConfigs = appsConfigs;
         this.collections = collections;
+        this.jdbc = jdbc;
     }
 
     /** Parses and validates the storeId from the URL (no JWT needed). */
@@ -225,6 +228,9 @@ public class PublicStorefrontController {
             m.put("description", c.getDescription());
             m.put("image", c.getImageUrl());
             m.put("sort", c.getSortOrder());
+            m.put("productIds", jdbc.queryForList(
+                    "SELECT product_id FROM collection_products WHERE collection_id = ? ORDER BY position",
+                    Long.class, c.getId()).stream().map(String::valueOf).toList());
             return m;
         }).collect(Collectors.toList());
     }

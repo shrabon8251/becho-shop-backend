@@ -94,6 +94,7 @@ public class CatalogService {
             variant.setPosition(pos++);
             p.getVariants().add(variant);
         }
+        syncImages(p, req.images());
         ProductDto dto = toDto(products.save(p));
         cacheEvictor.evictStore(TenantContext.requireStoreId());
         return dto;
@@ -112,6 +113,11 @@ public class CatalogService {
         }
         p.setProductType(req.productType());
         p.setVendor(req.vendor());
+        // Only replace images when the request carries the field; a null list
+        // (e.g. callers that don't manage images) must not wipe existing photos.
+        if (req.images() != null) {
+            syncImages(p, req.images());
+        }
         ProductDto dto = toDto(products.save(p));
         cacheEvictor.evictStore(TenantContext.requireStoreId());
         return dto;
@@ -143,6 +149,44 @@ public class CatalogService {
                 .toList();
         return new ProductDto(p.getId(), p.getTitle(), p.getSlug(), p.getDescription(), p.getStatus(),
                 p.getProductType(), p.getVendor(), p.getPublishedAt(), vDtos, imgUrls);
+    }
+
+    /**
+     * Replaces the product's images with the given URLs. {@code Product.images}
+     * is {@code orphanRemoval=true}, so clearing the collection deletes the old
+     * rows and cascade-persist saves the new ones in the same transaction.
+     * A null list leaves existing images untouched; URLs are sanitized
+     * (non-blank, http(s), max 1024 chars, max 10, de-duplicated).
+     */
+    private void syncImages(Product p, List<String> urls) {
+        if (urls == null) {
+            return;
+        }
+        p.getImages().clear();
+        int pos = 0;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String raw : urls) {
+            if (pos >= 10) {
+                break;
+            }
+            if (raw == null) {
+                continue;
+            }
+            String u = raw.trim();
+            if (u.isEmpty() || u.length() > 1024 || seen.contains(u)) {
+                continue;
+            }
+            String lower = u.toLowerCase(java.util.Locale.ROOT);
+            if (!lower.startsWith("https://") && !lower.startsWith("http://")) {
+                continue;
+            }
+            seen.add(u);
+            ProductImage img = new ProductImage();
+            img.setProduct(p);
+            img.setUrl(u);
+            img.setPosition(pos++);
+            p.getImages().add(img);
+        }
     }
 
     private static String slugify(String s) {

@@ -16,7 +16,8 @@ public class CatalogDtos {
             String status,
             String productType,
             String vendor,
-            @NotEmpty List<VariantInput> variants) {}
+            @NotEmpty List<VariantInput> variants,
+            List<String> images) {}
 
     public record VariantDto(Long id, String sku, String option1, String option2, String option3,
                              long priceMinor, Long compareAtMinor, int position) {}
