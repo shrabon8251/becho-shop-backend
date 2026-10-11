@@ -96,6 +96,7 @@ public class CatalogService {
         p.setStatus(req.status() == null ? "draft" : req.status());
         p.setProductType(req.productType());
         p.setVendor(req.vendor());
+        p.setVideoUrl(req.videoUrl());
         if ("active".equals(p.getStatus())) p.setPublishedAt(LocalDateTime.now());
 
         if (req.variants() == null || req.variants().isEmpty()) {
@@ -146,6 +147,7 @@ public class CatalogService {
         }
         p.setProductType(req.productType());
         p.setVendor(req.vendor());
+        p.setVideoUrl(req.videoUrl());
         // BUG-29 fix: variants were never synced on update (price/sku/stock edits
         // silently lost). Upsert by id; new client-side ids create new variants.
         List<ProductVariant> synced = syncVariants(store, p, req.variants());
@@ -196,7 +198,7 @@ public class CatalogService {
                 .map(ProductImage::getUrl)
                 .toList();
         return new ProductDto(p.getId(), p.getTitle(), p.getSlug(), p.getDescription(), p.getStatus(),
-                p.getProductType(), p.getVendor(), p.getPublishedAt(), vDtos, imgUrls);
+                p.getProductType(), p.getVendor(), p.getVideoUrl(), p.getPublishedAt(), vDtos, imgUrls);
     }
 
     /**

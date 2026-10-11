@@ -19,6 +19,7 @@ public class CatalogDtos {
             String status,
             String productType,
             String vendor,
+            String videoUrl,
             @NotEmpty List<VariantInput> variants,
             List<String> images) {}
 
@@ -26,6 +27,6 @@ public class CatalogDtos {
                              long priceMinor, Long compareAtMinor, int position, int stock) {}
 
     public record ProductDto(Long id, String title, String slug, String description, String status,
-                             String productType, String vendor, LocalDateTime publishedAt,
+                             String productType, String vendor, String videoUrl, LocalDateTime publishedAt,
                              List<VariantDto> variants, List<String> images) {}
 }

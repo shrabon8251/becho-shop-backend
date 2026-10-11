@@ -78,6 +78,7 @@ public class StoreProductController {
         String status = (String) body.getOrDefault("status", "Draft");
         String productType = (String) body.get("productType");
         String vendor = (String) body.get("vendor");
+        String videoUrl = (String) body.get("videoUrl");
         List<Map<String, Object>> variants = (List<Map<String, Object>>) body.get("variants");
         List<VariantInput> inputs;
         if (variants == null || variants.isEmpty()) {
@@ -102,7 +103,7 @@ public class StoreProductController {
             )).collect(Collectors.toList());
         }
         List<String> images = (List<String>) body.get("images");
-        return new CreateProductRequest(title, description, status, productType, vendor, inputs, images);
+        return new CreateProductRequest(title, description, status, productType, vendor, videoUrl, inputs, images);
     }
 
     private Map<String, Object> toFrontend(ProductDto p) {
@@ -126,6 +127,7 @@ public class StoreProductController {
         m.put("description", p.description());
         m.put("vendor", p.vendor());
         m.put("productType", p.productType());
+        m.put("videoUrl", p.videoUrl());
         m.put("images", p.images());
         m.put("variants", variants);
         m.put("collectionId", "");
