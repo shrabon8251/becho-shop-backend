@@ -6,14 +6,14 @@ import com.becho.saas.modules.tenancy.entity.User;
 import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import com.becho.saas.modules.tenancy.repository.StoreStaffRepository;
 import com.becho.saas.modules.tenancy.repository.UserRepository;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,17 +33,15 @@ public class StoreStaffController {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final StoreScope scope;
-    private final ObjectMapper objectMapper;
 
     public StoreStaffController(StoreStaffRepository staff, StoreRepository stores,
                                 UserRepository users, PasswordEncoder passwordEncoder,
-                                StoreScope scope, ObjectMapper objectMapper) {
+                                StoreScope scope) {
         this.staff = staff;
         this.stores = stores;
         this.users = users;
         this.passwordEncoder = passwordEncoder;
         this.scope = scope;
-        this.objectMapper = objectMapper;
     }
 
     @GetMapping
@@ -166,24 +164,47 @@ public class StoreStaffController {
     /**
      * BUG-1 fix: the permissions column is JSON — a comma-joined "a,b" string is
      * invalid JSON and MySQL rejects the insert with 500. Serialize as a real
-     * JSON array instead.
+     * JSON array instead. (Manual serialization — no Jackson dependency.)
      */
     private String toPermissionsJson(List<?> perms) {
-        try {
-            return objectMapper.writeValueAsString(perms.stream().map(Object::toString).toList());
-        } catch (Exception e) {
-            throw ApiException.badRequest("BAD_PERMISSIONS", "Invalid permissions payload");
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (Object p : perms) {
+            if (!first) sb.append(',');
+            first = false;
+            sb.append('"')
+                    .append(p.toString().replace("\\", "\\\\").replace("\"", "\\\""))
+                    .append('"');
         }
+        return sb.append(']').toString();
     }
 
-    /** Parses the JSON permissions array; falls back to comma-split for legacy rows. */
+    /**
+     * Parses the JSON permissions array; falls back to comma-split for legacy
+     * rows. (Manual parser — no Jackson dependency. Permissions are simple
+     * tokens; handles \" and \\ escapes inside quoted strings.)
+     */
     private List<String> parsePermissions(String raw) {
         if (raw == null || raw.isBlank()) return List.of();
-        try {
-            return objectMapper.readValue(raw, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            return List.of(raw.split(","));
+        String t = raw.trim();
+        if (!t.startsWith("[")) {
+            return Arrays.stream(t.split(",")).map(String::trim)
+                    .filter(s -> !s.isEmpty()).toList();
         }
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inStr = false, esc = false, hasStr = false;
+        for (int i = 1; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (esc) { cur.append(c); esc = false; }
+            else if (c == '\\' && inStr) esc = true;
+            else if (c == '"') {
+                inStr = !inStr;
+                if (!inStr && hasStr) { out.add(cur.toString()); cur.setLength(0); hasStr = false; }
+                else if (inStr) hasStr = true;
+            } else if (inStr) cur.append(c);
+        }
+        return out;
     }
 
     /** The caller's role for the scoped store, from the JWT authorities. */
