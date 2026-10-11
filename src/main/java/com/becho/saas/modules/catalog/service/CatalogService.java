@@ -85,7 +85,11 @@ public class CatalogService {
             ProductVariant variant = new ProductVariant();
             variant.setProduct(p);
             variant.setStore(store);
-            variant.setSku(v.sku());
+            // BUG-46 fix: empty SKU ("") violates uq_variants_sku unique constraint
+            // when multiple variants have no SKU. Use null instead (NULLs are
+            // allowed multiple times in a unique column).
+            String sku = v.sku();
+            variant.setSku(sku == null || sku.isBlank() ? null : sku.trim());
             variant.setOption1(v.option1());
             variant.setOption2(v.option2());
             variant.setOption3(v.option3());
