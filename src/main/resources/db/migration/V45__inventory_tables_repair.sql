@@ -1,4 +1,4 @@
--- V43: Repair - re-create inventory tables skipped by baseline-on-migrate (V3 was baselined)
+-- V45: Repair - re-create inventory tables skipped by baseline-on-migrate (V3 was baselined)
 
 CREATE TABLE IF NOT EXISTS locations (
                                          id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
