@@ -29,12 +29,13 @@ class BillingServiceTest {
     @Mock PromoCodeRepository promoCodes;
     @Mock PromoRedemptionRepository redemptions;
     @Mock StoreRepository stores;
+    @Mock com.becho.saas.modules.payments.providers.SslCommerzProvider sslCommerz;
 
     BillingService billing;
 
     @BeforeEach
     void setUp() {
-        billing = new BillingService(promoCodes, redemptions, stores);
+        billing = new BillingService(promoCodes, redemptions, stores, sslCommerz);
     }
 
     private PromoCode activePromo() {
