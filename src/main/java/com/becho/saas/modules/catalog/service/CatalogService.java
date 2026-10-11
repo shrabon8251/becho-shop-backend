@@ -329,6 +329,8 @@ public class CatalogService {
             img.setProduct(p);
             img.setUrl(u);
             img.setPosition(pos++);
+            // BUG-47 fix: the image was never added to the product's collection!
+            p.getImages().add(img);
         }
     }
 
