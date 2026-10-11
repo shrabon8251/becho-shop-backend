@@ -122,6 +122,7 @@ public class PublicStorefrontController {
             m.put("option1", v.option1());
             m.put("option2", v.option2());
             m.put("option3", v.option3());
+            m.put("stock", v.stock());
             return m;
         }).collect(Collectors.toList());
         Map<String, Object> m = new LinkedHashMap<>();
