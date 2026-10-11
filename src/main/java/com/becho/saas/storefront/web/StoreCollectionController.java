@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -85,9 +87,24 @@ public class StoreCollectionController {
 
     private void applyBody(Collection c, Map<String, Object> body) {
         if (body.get("name") != null) c.setTitle((String) body.get("name"));
+        if (body.get("title") != null && c.getTitle() == null) c.setTitle((String) body.get("title"));
         if (body.get("description") != null) c.setDescription((String) body.get("description"));
         if (body.get("image") != null) c.setImageUrl((String) body.get("image"));
         if (body.get("sort") != null) c.setSortOrder((String) body.get("sort"));
+        // BUG-46c fix: slug is NOT NULL (+ unique per store) in the DB but was never
+        // set here, so EVERY collection create died with 500 INTERNAL_ERROR.
+        // Generate it from the title; keep the existing slug on updates so
+        // storefront URLs stay stable.
+        if (c.getTitle() == null || c.getTitle().isBlank()) c.setTitle("Untitled collection");
+        if (c.getSlug() == null || c.getSlug().isBlank()) {
+            c.setSlug(slugify(c.getTitle()) + "-" + UUID.randomUUID().toString().substring(0, 8));
+        }
+    }
+
+    private static String slugify(String s) {
+        String base = s.toLowerCase(Locale.ROOT).trim()
+                .replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+        return base.isEmpty() ? "collection" : base;
     }
 
     /**
