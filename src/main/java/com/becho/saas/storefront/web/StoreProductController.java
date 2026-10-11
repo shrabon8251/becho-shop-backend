@@ -158,6 +158,7 @@ public class StoreProductController {
         m.put("vendor", p.vendor());
         m.put("productType", p.productType());
         m.put("images", p.images());
+        m.put("videoUrl", p.videoUrl());
         m.put("variants", variants);
         m.put("collectionId", "");
         return m;
