@@ -68,8 +68,17 @@ public class AuthService {
      */
     @Transactional
     public RegisterResponse register(RegisterRequest req) {
-        if (users.existsByEmail(req.email())) {
-            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "Email is already registered");
+        String email = req.email().toLowerCase().trim();
+        var existing = users.findByEmail(email);
+        if (existing.isPresent()) {
+            User old = existing.get();
+            if (old.getEmailVerifiedAt() != null) {
+                throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "Email is already registered");
+            }
+            // Unverified account (user left before verifying): delete it so the
+            // email can be reused. The email is only "taken" after verification.
+            users.delete(old);
+            users.flush();
         }
         User user = new User();
         user.setEmail(req.email().toLowerCase().trim());
