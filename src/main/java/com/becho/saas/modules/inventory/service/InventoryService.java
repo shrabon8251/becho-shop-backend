@@ -7,6 +7,7 @@ import com.becho.saas.modules.inventory.entity.*;
 import com.becho.saas.modules.inventory.repository.*;
 import com.becho.saas.tenancy.TenantContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -65,7 +66,9 @@ public class InventoryService {
         audit(variantId, locationId, -qty, "fulfill", "fulfillment", fulfillmentId);
     }
 
-    @Transactional
+    // BUG-29 fix: REQUIRES_NEW so a failure here (e.g. missing inventory_levels
+    // table) does NOT mark the caller's transaction as rollback-only.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void adjust(Long locationId, Long variantId, int newOnHand, String reason) {
         InventoryLevel level = lockLevel(locationId, variantId);
         int delta = newOnHand - level.getOnHand();
