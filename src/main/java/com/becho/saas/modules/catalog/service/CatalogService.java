@@ -165,7 +165,11 @@ public class CatalogService {
     public void deleteProduct(Long id) {
         Product p = findProduct(id);
         p.setDeletedAt(LocalDateTime.now());
-        p.getVariants().forEach(v -> v.setDeletedAt(LocalDateTime.now()));
+        p.getVariants().forEach(v -> {
+            v.setDeletedAt(LocalDateTime.now());
+            // Free the UNIQUE (store_id, sku) key so the SKU can be reused.
+            v.setSku(null);
+        });
         products.save(p);
         cacheEvictor.evictStore(TenantContext.requireStoreId());
     }
@@ -212,8 +216,14 @@ public class CatalogService {
             return ordered;
         }
         Map<Long, ProductVariant> existing = new HashMap<>();
+        Map<String, ProductVariant> existingBySku = new HashMap<>();
         for (ProductVariant v : p.getVariants()) {
-            if (v.getDeletedAt() == null && v.getId() != null) existing.put(v.getId(), v);
+            if (v.getDeletedAt() == null && v.getId() != null) {
+                existing.put(v.getId(), v);
+                if (v.getSku() != null && !v.getSku().isBlank()) {
+                    existingBySku.put(v.getSku().trim().toLowerCase(java.util.Locale.ROOT), v);
+                }
+            }
         }
         int pos = 0;
         for (VariantInput in : inputs) {
@@ -222,8 +232,12 @@ public class CatalogService {
                 try {
                     v = existing.get(Long.valueOf(in.id().trim()));
                 } catch (NumberFormatException ignored) {
-                    // New client-side id (UUID) -> create a fresh variant below.
+                    // New client-side id (UUID) -> try SKU match below.
                 }
+            }
+            // Fallback: match by SKU so updates don't re-insert duplicates.
+            if (v == null && in.sku() != null && !in.sku().isBlank()) {
+                v = existingBySku.get(in.sku().trim().toLowerCase(java.util.Locale.ROOT));
             }
             if (v == null) {
                 v = new ProductVariant();
