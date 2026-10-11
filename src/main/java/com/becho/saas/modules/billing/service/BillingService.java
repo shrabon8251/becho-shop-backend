@@ -5,6 +5,8 @@ import com.becho.saas.modules.billing.entity.PromoCode;
 import com.becho.saas.modules.billing.entity.PromoRedemption;
 import com.becho.saas.modules.billing.repository.PromoCodeRepository;
 import com.becho.saas.modules.billing.repository.PromoRedemptionRepository;
+import com.becho.saas.modules.payments.providers.SslCommerzProvider;
+import com.becho.saas.modules.payments.PaymentProvider;
 import com.becho.saas.modules.tenancy.entity.Store;
 import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -55,13 +57,48 @@ public class BillingService {
     private final PromoCodeRepository promoCodes;
     private final PromoRedemptionRepository redemptions;
     private final StoreRepository stores;
+    private final SslCommerzProvider sslCommerz;
 
     public BillingService(PromoCodeRepository promoCodes,
                           PromoRedemptionRepository redemptions,
-                          StoreRepository stores) {
+                          StoreRepository stores,
+                          SslCommerzProvider sslCommerz) {
         this.promoCodes = promoCodes;
         this.redemptions = redemptions;
         this.stores = stores;
+        this.sslCommerz = sslCommerz;
+    }
+
+    /**
+     * Initiate SSLCommerz payment for plan subscription.
+     * Returns GatewayPageURL for redirect.
+     */
+    public Map<String, Object> initiateSslCommerz(Long storeId, Map<String, Object> body) {
+        Store store = stores.findById(storeId)
+                .orElseThrow(() -> ApiException.notFound("Store"));
+        String plan = (String) body.getOrDefault("plan", store.getPlanName());
+        String cycle = (String) body.getOrDefault("cycle", "monthly");
+
+        Map<String, Object> quote = quote(plan, cycle, (String) body.get("promoCode"));
+        long totalMinor = ((Number) quote.get("total")).longValue() * 100;
+
+        String baseUrl = "https://becho-shop.vercel.app";
+        var req = new PaymentProvider.InitRequest(
+                storeId,
+                System.currentTimeMillis(),
+                totalMinor,
+                "BDT",
+                "billing@becho.shop",
+                "",
+                baseUrl + "/admin/billing/success",
+                baseUrl + "/admin/billing/failed",
+                baseUrl + "/admin/billing/cancelled"
+        );
+        var result = sslCommerz.initPayment(req);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("gatewayUrl", result.checkoutUrl());
+        m.put("sessionKey", result.gatewaySessionId());
+        return m;
     }
 
     /** Server-side price breakdown. Never trust client-computed totals. */

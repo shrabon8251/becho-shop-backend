@@ -90,6 +90,14 @@ public class StoreBillingController {
 
     public record BillingMethodRequest(String kind, String label, String trxId) {}
 
+    @PostMapping("/sslcommerz/initiate")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
+    public Map<String, Object> initiateSslCommerz(@PathVariable String storeId,
+                                                  @RequestBody Map<String, Object> body) {
+        Long sid = scope.require(storeId);
+        return billing.initiateSslCommerz(sid, body);
+    }
+
     @GetMapping("/method")
     @PreAuthorize("hasAnyRole('OWNER','ADMIN')")
     public Map<String, Object> getMethod(@PathVariable String storeId) {
