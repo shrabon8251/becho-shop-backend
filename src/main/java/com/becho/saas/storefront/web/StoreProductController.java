@@ -83,7 +83,10 @@ public class StoreProductController {
         if (variants == null || variants.isEmpty()) {
             Object priceObj = body.get("price");
             long priceMinor = priceObj instanceof Number n ? n.longValue() : 0;
-            inputs = List.of(new VariantInput(null, "DEFAULT", null, null, null, priceMinor, null, 0));
+            // BUG-46d fix: default SKU must be null, not "DEFAULT" — the UNIQUE
+            // (store_id, sku) key collides on repeat creates, and MySQL allows
+            // multiple NULLs in a unique key.
+            inputs = List.of(new VariantInput(null, null, null, null, null, priceMinor, null, 0));
         } else {
             inputs = variants.stream().map(v -> new VariantInput(
                     // BUG-29 fix: pass through the variant id (update matches on it)

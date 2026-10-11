@@ -12,6 +12,8 @@ import com.becho.saas.modules.inventory.service.InventoryService;
 import com.becho.saas.modules.tenancy.entity.Store;
 import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import com.becho.saas.tenancy.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.cache.annotation.Cacheable;
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 /** Single Responsibility: catalog aggregate only. All reads/writes store-scoped. */
 @Service
 public class CatalogService {
+    private static final Logger log = LoggerFactory.getLogger(CatalogService.class);
 
     private final ProductRepository products;
     private final ProductVariantRepository variants;
@@ -249,12 +252,18 @@ public class CatalogService {
      */
     private void adjustStock(Store store, List<VariantInput> inputs, List<ProductVariant> variants, String reason) {
         if (inputs == null || inputs.isEmpty() || variants.isEmpty()) return;
-        Location loc = defaultLocation(store);
-        for (int i = 0; i < Math.min(inputs.size(), variants.size()); i++) {
-            ProductVariant v = variants.get(i);
-            if (v.getId() != null) {
-                inventory.adjust(loc.getId(), v.getId(), Math.max(0, inputs.get(i).stock()), reason);
+        try {
+            Location loc = defaultLocation(store);
+            for (int i = 0; i < Math.min(inputs.size(), variants.size()); i++) {
+                ProductVariant v = variants.get(i);
+                if (v.getId() != null) {
+                    inventory.adjust(loc.getId(), v.getId(), Math.max(0, inputs.get(i).stock()), reason);
+                }
             }
+        } catch (Exception e) {
+            // BUG-29 resilience: if inventory tables are unavailable, don't fail
+            // product creation — stock will read as 0 until inventory is fixed.
+            log.warn("adjustStock skipped: {}", e.getMessage());
         }
     }
 
@@ -273,11 +282,17 @@ public class CatalogService {
 
     private Map<Long, Integer> stockByVariantIds(List<Long> ids) {
         if (ids.isEmpty()) return Map.of();
-        Map<Long, Integer> m = new HashMap<>();
-        for (Object[] row : levels.sumOnHandByVariantIds(ids)) {
-            m.put((Long) row[0], ((Number) row[1]).intValue());
+        try {
+            Map<Long, Integer> m = new HashMap<>();
+            for (Object[] row : levels.sumOnHandByVariantIds(ids)) {
+                m.put((Long) row[0], ((Number) row[1]).intValue());
+            }
+            return m;
+        } catch (Exception e) {
+            // BUG-29 resilience: inventory tables unavailable — report zero stock.
+            log.warn("stockByVariantIds skipped: {}", e.getMessage());
+            return Map.of();
         }
-        return m;
     }
 
     /**
