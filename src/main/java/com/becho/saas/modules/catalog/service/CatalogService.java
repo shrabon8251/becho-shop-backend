@@ -137,17 +137,19 @@ public class CatalogService {
     public ProductDto updateProduct(Long id, CreateProductRequest req) {
         Product p = findProduct(id);
         Store store = p.getStore();
-        p.setTitle(req.title().trim());
-        p.setDescription(req.description());
+        // BUG-51 fix: merge semantics — only overwrite fields the client sent.
+        // Null means "leave unchanged", so partial PUTs don't wipe data or NPE.
+        if (req.title() != null) p.setTitle(req.title().trim());
+        if (req.description() != null) p.setDescription(req.description());
         if (req.status() != null) {
             p.setStatus(req.status());
             if ("active".equals(req.status()) && p.getPublishedAt() == null) {
                 p.setPublishedAt(LocalDateTime.now());
             }
         }
-        p.setProductType(req.productType());
-        p.setVendor(req.vendor());
-        p.setVideoUrl(req.videoUrl());
+        if (req.productType() != null) p.setProductType(req.productType());
+        if (req.vendor() != null) p.setVendor(req.vendor());
+        if (req.videoUrl() != null) p.setVideoUrl(req.videoUrl());
         // BUG-29 fix: variants were never synced on update (price/sku/stock edits
         // silently lost). Upsert by id; new client-side ids create new variants.
         List<ProductVariant> synced = syncVariants(store, p, req.variants());
