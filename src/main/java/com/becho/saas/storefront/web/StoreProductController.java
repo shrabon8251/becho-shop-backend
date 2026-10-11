@@ -57,11 +57,9 @@ public class StoreProductController {
                                     @PathVariable Long id,
                                     @RequestBody Map<String, Object> body) {
         scope.require(storeId);
-        try {
-            return toFrontend(catalogService.updateProduct(id, toCreateRequest(body)));
-        } catch (Exception e) {
-            return toFrontend(catalogService.createProduct(toCreateRequest(body)));
-        }
+        // BUG-51 fix: use toUpdateRequest (no defaults) so partial PUTs merge
+        // instead of destructively overwriting with "Untitled"/"Draft"/null.
+        return toFrontend(catalogService.updateProduct(id, toUpdateRequest(body)));
     }
 
     @DeleteMapping("/{id}")
@@ -106,6 +104,38 @@ public class StoreProductController {
         return new CreateProductRequest(title, description, status, productType, vendor, videoUrl, inputs, images);
     }
 
+    /**
+     * BUG-51 fix: for PUT updates, do NOT apply create-defaults ("Untitled",
+     * "Draft") and do NOT synthesize a junk variant when the client omits
+     * variants. Null fields mean "leave unchanged" — CatalogService.updateProduct
+     * merges instead of replacing.
+     */
+    @SuppressWarnings("unchecked")
+    private CreateProductRequest toUpdateRequest(Map<String, Object> body) {
+        String title = (String) body.get("title");
+        String description = (String) body.get("description");
+        String status = (String) body.get("status");
+        String productType = (String) body.get("productType");
+        String vendor = (String) body.get("vendor");
+        String videoUrl = (String) body.get("videoUrl");
+        List<Map<String, Object>> variants = (List<Map<String, Object>>) body.get("variants");
+        List<VariantInput> inputs = null;
+        if (variants != null && !variants.isEmpty()) {
+            inputs = variants.stream().map(v -> new VariantInput(
+                    (String) v.get("id"),
+                    (String) v.getOrDefault("sku", ""),
+                    (String) v.get("option1"),
+                    (String) v.get("option2"),
+                    (String) v.get("option3"),
+                    v.get("price") instanceof Number n ? n.longValue() : 0,
+                    v.get("compareAt") instanceof Number n ? n.longValue() : null,
+                    v.get("stock") instanceof Number n ? n.intValue() : 0
+            )).collect(Collectors.toList());
+        }
+        List<String> images = (List<String>) body.get("images");
+        return new CreateProductRequest(title, description, status, productType, vendor, videoUrl, inputs, images);
+    }
+
     private Map<String, Object> toFrontend(ProductDto p) {
         List<Map<String, Object>> variants = p.variants().stream().map(v -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -127,7 +157,6 @@ public class StoreProductController {
         m.put("description", p.description());
         m.put("vendor", p.vendor());
         m.put("productType", p.productType());
-        m.put("videoUrl", p.videoUrl());
         m.put("images", p.images());
         m.put("variants", variants);
         m.put("collectionId", "");
