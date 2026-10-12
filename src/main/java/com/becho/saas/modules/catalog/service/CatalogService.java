@@ -260,6 +260,18 @@ public class CatalogService {
             v.setPosition(pos++);
             ordered.add(v);
         }
+        // Soft-delete variants that were removed from the input.
+        // Null the SKU to free the UNIQUE (store_id, sku) key so it can be reused.
+        java.util.Set<Long> keptIds = new java.util.HashSet<>();
+        for (ProductVariant v : ordered) {
+            if (v.getId() != null) keptIds.add(v.getId());
+        }
+        for (ProductVariant v : p.getVariants()) {
+            if (v.getDeletedAt() == null && v.getId() != null && !keptIds.contains(v.getId())) {
+                v.setDeletedAt(java.time.LocalDateTime.now());
+                v.setSku(null);
+            }
+        }
         return ordered;
     }
 
