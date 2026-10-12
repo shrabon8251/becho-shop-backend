@@ -70,6 +70,8 @@ public class SecurityConfig {
                         // Public checkout: order creation + gateway payment intents (rate-limited).
                         .requestMatchers(HttpMethod.POST, "/stores/*/checkout/orders",
                                 "/stores/*/payments/intents").permitAll()
+                        // SSLCommerz gateway callbacks (no auth — posted by the gateway).
+                        .requestMatchers(HttpMethod.POST, "/stores/*/billing/sslcommerz/**").permitAll()
                         // Public "Back in Stock" alert subscription (rate-limited).
                         .requestMatchers(HttpMethod.POST, "/stores/*/stock-alerts").permitAll()
                         // Public contact form.
