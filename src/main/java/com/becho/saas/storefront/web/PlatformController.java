@@ -6,6 +6,7 @@ import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,8 @@ public class PlatformController {
             m.put("status", "suspended".equalsIgnoreCase(s.getStatus()) ? "Suspended" : "Active");
             m.put("plan", s.getPlanName() != null ? s.getPlanName().toLowerCase() : "starter");
             m.put("gmv", 0); // TODO(post-demo): sum of paid orders per store
+            // Epoch millis for the frontend signup chart (BaseEntity.createdAt is UTC).
+            m.put("createdAt", s.getCreatedAt() == null ? 0 : s.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli());
             m.put("currency", s.getCurrency() != null ? s.getCurrency() : "BDT");
             m.put("ownerEmail", "");
             return m;

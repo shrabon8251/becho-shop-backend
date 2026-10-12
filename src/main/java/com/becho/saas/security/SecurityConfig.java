@@ -48,6 +48,15 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable) // stateless JWT API
                 .cors(c -> c.configurationSource(req -> {
                     var cfg = new CorsConfiguration();
+                    String path = req.getRequestURI();
+                    // SSLCommerz gateway callbacks: allow the gateway origin (no credentials needed).
+                    if (path != null && path.contains("/billing/sslcommerz/")) {
+                        cfg.setAllowedOrigins(List.of("*"));
+                        cfg.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+                        cfg.setAllowedHeaders(List.of("*"));
+                        cfg.setAllowCredentials(false);
+                        return cfg;
+                    }
                     cfg.setAllowedOrigins(List.of(allowedOrigins.split(",")));
                     cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                     cfg.setAllowedHeaders(List.of("*"));
