@@ -72,6 +72,8 @@ public class SecurityConfig {
                                 "/stores/*/payments/intents").permitAll()
                         // SSLCommerz gateway callbacks (no auth — posted by the gateway).
                         .requestMatchers(HttpMethod.POST, "/stores/*/billing/sslcommerz/**").permitAll()
+                        // Public shipping profiles for checkout (anonymous shoppers).
+                        .requestMatchers(HttpMethod.GET, "/stores/*/shippingProfiles/public").permitAll()
                         // Public "Back in Stock" alert subscription (rate-limited).
                         .requestMatchers(HttpMethod.POST, "/stores/*/stock-alerts").permitAll()
                         // Public contact form.
