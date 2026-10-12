@@ -82,7 +82,7 @@ public class BillingService {
         Map<String, Object> quote = quote(plan, cycle, (String) body.get("promoCode"));
         long totalMinor = ((Number) quote.get("total")).longValue() * 100;
 
-        String baseUrl = "https://becho-shop.vercel.app";
+        String backendUrl = "https://becho-shop-backend.onrender.com";
         var req = new PaymentProvider.InitRequest(
                 storeId,
                 System.currentTimeMillis(),
@@ -90,9 +90,9 @@ public class BillingService {
                 "BDT",
                 "billing@becho.shop",
                 "",
-                baseUrl + "/admin/billing/success",
-                baseUrl + "/admin/billing/failed",
-                baseUrl + "/admin/billing/cancelled"
+                backendUrl + "/stores/" + storeId + "/billing/sslcommerz/success",
+                backendUrl + "/stores/" + storeId + "/billing/sslcommerz/failed",
+                backendUrl + "/stores/" + storeId + "/billing/sslcommerz/cancelled"
         );
         var result = sslCommerz.initPayment(req);
         Map<String, Object> m = new LinkedHashMap<>();

@@ -126,4 +126,29 @@ public class StoreBillingController {
         Long sid = scope.require(storeId);
         return billing.confirmSubscriptionPayment(sid, req == null ? null : req.trxId());
     }
+
+    /**
+     * SSLCommerz callbacks. These are POSTed by the gateway (no auth).
+     * On success, activate the subscription and redirect to frontend.
+     */
+    @PostMapping("/sslcommerz/success")
+    public org.springframework.web.servlet.view.RedirectView sslSuccess(
+            @PathVariable String storeId,
+            @RequestParam Map<String, String> params) {
+        try {
+            Long sid = Long.parseLong(storeId);
+            billing.activateSubscription(sid);
+        } catch (Exception ignored) {}
+        return new org.springframework.web.servlet.view.RedirectView("https://becho-shop.vercel.app/admin/billing?paid=1");
+    }
+
+    @PostMapping("/sslcommerz/failed")
+    public org.springframework.web.servlet.view.RedirectView sslFailed(@PathVariable String storeId) {
+        return new org.springframework.web.servlet.view.RedirectView("https://becho-shop.vercel.app/admin/billing?paid=0");
+    }
+
+    @PostMapping("/sslcommerz/cancelled")
+    public org.springframework.web.servlet.view.RedirectView sslCancelled(@PathVariable String storeId) {
+        return new org.springframework.web.servlet.view.RedirectView("https://becho-shop.vercel.app/admin/billing");
+    }
 }
