@@ -50,7 +50,13 @@ public class StoreShippingProfileController {
      */
     @GetMapping("/public")
     public List<Map<String, Object>> listPublic(@PathVariable String storeId) {
-        Long sid = scope.require(storeId);
+        // Public endpoint — no auth. Parse storeId directly, don't use scope.require().
+        Long sid;
+        try {
+            sid = Long.valueOf(storeId);
+        } catch (NumberFormatException e) {
+            throw new com.becho.saas.common.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST, "INVALID_STORE_ID", "Invalid store id: " + storeId);
+        }
         return profiles.findByStoreIdOrderByCreatedAtDesc(sid).stream()
                 .map(this::toFrontend).toList();
     }
