@@ -74,6 +74,16 @@ public class CatalogService {
             var last = page.get(page.size() - 1);
             nextCursor = KeysetPage.encode(last.getCreatedAt(), last.getId());
         }
+        // PERF fix (N+1): batch-initialize variants + images for the whole page
+        // in 2 queries. Same transaction/persistence context, so toDto()'s
+        // p.getVariants()/p.getImages() hit the 1st-level cache — no extra SQL.
+        // Before: 1 + 2*N queries (15 products ≈ 32 queries, ~10s cross-region).
+        // After: 3 queries total.
+        if (!page.isEmpty()) {
+            List<Long> ids = page.stream().map(Product::getId).toList();
+            products.findAllWithVariants(ids);
+            products.findAllWithImages(ids);
+        }
         return new KeysetPage<>(page.stream().map(this::toDto).toList(), nextCursor, hasMore);
     }
 
@@ -179,8 +189,15 @@ public class CatalogService {
     }
 
     private Product findProduct(Long id) {
-        return products.findByIdAndStoreIdAndDeletedAtIsNull(id, TenantContext.requireStoreId())
+        // PERF fix (N+1): batch-initialize variants + images with 2 queries.
+        // (One query can't FETCH both — Hibernate throws MultipleBagFetchException
+        // when fetching two List collections at once.)
+        Product p = products.findByIdAndStoreIdAndDeletedAtIsNull(id, TenantContext.requireStoreId())
                 .orElseThrow(() -> ApiException.notFound("Product"));
+        List<Long> ids = List.of(p.getId());
+        products.findAllWithVariants(ids);
+        products.findAllWithImages(ids);
+        return p;
     }
 
     private ProductDto toDto(Product p) {
