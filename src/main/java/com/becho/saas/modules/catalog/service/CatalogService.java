@@ -74,17 +74,22 @@ public class CatalogService {
             var last = page.get(page.size() - 1);
             nextCursor = KeysetPage.encode(last.getCreatedAt(), last.getId());
         }
-        // PERF fix (N+1): batch-initialize variants + images for the whole page
-        // in 2 queries. Same transaction/persistence context, so toDto()'s
-        // p.getVariants()/p.getImages() hit the 1st-level cache — no extra SQL.
-        // Before: 1 + 2*N queries (15 products ≈ 32 queries, ~10s cross-region).
-        // After: 3 queries total.
-        if (!page.isEmpty()) {
-            List<Long> ids = page.stream().map(Product::getId).toList();
-            products.findAllWithVariants(ids);
-            products.findAllWithImages(ids);
-        }
         return new KeysetPage<>(page.stream().map(this::toDto).toList(), nextCursor, hasMore);
+    }
+
+    /**
+     * Exact summary counts for the Products page (total / active / draft / low stock).
+     * The list endpoint returns at most 100 rows, so the page must NOT count from
+     * the loaded list — these COUNT queries see every product in the store.
+     * Deliberately NOT cached: counts must reflect the latest create/delete.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Long> productCounts() {
+        Long storeId = TenantContext.requireStoreId();
+        long total = products.countAll(storeId);
+        long active = products.countByStatus(storeId, "active");
+        long lowStock = products.countLowStock(storeId);
+        return Map.of("total", total, "active", active, "draft", total - active, "lowStock", lowStock);
     }
 
     @Transactional(readOnly = true)
@@ -189,15 +194,8 @@ public class CatalogService {
     }
 
     private Product findProduct(Long id) {
-        // PERF fix (N+1): batch-initialize variants + images with 2 queries.
-        // (One query can't FETCH both — Hibernate throws MultipleBagFetchException
-        // when fetching two List collections at once.)
-        Product p = products.findByIdAndStoreIdAndDeletedAtIsNull(id, TenantContext.requireStoreId())
+        return products.findByIdAndStoreIdAndDeletedAtIsNull(id, TenantContext.requireStoreId())
                 .orElseThrow(() -> ApiException.notFound("Product"));
-        List<Long> ids = List.of(p.getId());
-        products.findAllWithVariants(ids);
-        products.findAllWithImages(ids);
-        return p;
     }
 
     private ProductDto toDto(Product p) {

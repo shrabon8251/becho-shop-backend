@@ -8,9 +8,13 @@ import com.becho.saas.modules.orders.web.OrderDtos.LineInput;
 import com.becho.saas.modules.orders.web.OrderDtos.OrderDto;
 import com.becho.saas.modules.orders.web.OrderDtos.RecordTransactionRequest;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +46,67 @@ public class StoreOrderController {
                 .stream().map(this::toFrontend).collect(Collectors.toList());
     }
 
+    /**
+     * Admin Orders page — one server-side page (default 20 rows). Filters + sort run
+     * on the backend; the old list endpoint above is untouched (Dashboard etc. use it).
+     */
+    @GetMapping("/page")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
+    public Map<String, Object> page(@PathVariable String storeId,
+                                    @RequestParam(defaultValue = "0") int page,
+                                    @RequestParam(defaultValue = "20") int size,
+                                    @RequestParam(required = false) String tab,
+                                    @RequestParam(required = false) String pay,
+                                    @RequestParam(required = false) String ful,
+                                    @RequestParam(required = false) Integer range,
+                                    @RequestParam(required = false) String q,
+                                    @RequestParam(defaultValue = "newest") String sort) {
+        Long sid = scope.require(storeId);
+        size = Math.min(Math.max(size, 1), 100);
+        page = Math.max(page, 0);
+        LocalDateTime since = range != null && range > 0 ? LocalDateTime.now().minusDays(range) : null;
+        String tabV = tab != null && !tab.isBlank() && !"all".equalsIgnoreCase(tab) ? tab.toLowerCase() : null;
+        String payV = normalizeStatus(pay);
+        String fulV = normalizeStatus(ful);
+        String qV = q != null && !q.isBlank() ? q.trim() : null;
+        Long qNum = null;
+        if (qV != null && qV.matches("\\d+")) {
+            try { qNum = Long.parseLong(qV); } catch (NumberFormatException ignored) { /* not a number after all */ }
+        }
+        // Sort is an allowlist switch — no client string ever reaches the query.
+        Sort sortObj = switch (sort) {
+            case "oldest" -> Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("id"));
+            case "total-desc" -> Sort.by(Sort.Order.desc("totalMinor"));
+            case "total-asc" -> Sort.by(Sort.Order.asc("totalMinor"));
+            default -> Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+        };
+        Page<Order> result = orders.findAdminPage(sid, tabV, payV, fulV, since, qV, qNum, PageRequest.of(page, size, sortObj));
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("items", result.getContent().stream().map(this::toFrontend).collect(Collectors.toList()));
+        m.put("total", result.getTotalElements());
+        m.put("hasMore", result.hasNext());
+        return m;
+    }
+
+    /** Exact summary counts for the Orders stat strip (range in days, null = all time). */
+    @GetMapping("/counts")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
+    public Map<String, Object> counts(@PathVariable String storeId,
+                                      @RequestParam(required = false) Integer range) {
+        Long sid = scope.require(storeId);
+        LocalDateTime since = range != null && range > 0 ? LocalDateTime.now().minusDays(range) : null;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("total", orders.countTotal(sid, since));
+        m.put("unfulfilled", orders.countUnfulfilled(sid, since));
+        m.put("unpaid", orders.countUnpaid(sid, since));
+        m.put("totalSalesMinor", orders.sumPaidTotal(sid, since));
+        return m;
+    }
+
+    private static String normalizeStatus(String v) {
+        return v != null && !v.isBlank() ? v.trim().toLowerCase() : null;
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
     public Map<String, Object> get(@PathVariable String storeId, @PathVariable Long id) {
@@ -62,22 +127,36 @@ public class StoreOrderController {
             int qty = it.get("qty") instanceof Number n ? n.intValue() : 1;
             return new LineInput(variantId, qty);
         }).collect(Collectors.toList());
+        // Manual orders (admin Orders page) send customerId + payMethod/paymentMethod +
+        // discountCode/code + notes/note; the storefront checkout shape is accepted too.
+        Object cid = body.get("customerId");
+        Long customerId = cid instanceof Number n ? n.longValue()
+                : cid != null && !String.valueOf(cid).isBlank() ? StoreScope.lid(String.valueOf(cid)) : null;
         var req = new CreateOrderRequest(
-                null,
+                customerId,
                 (String) body.get("email"),
                 (String) body.get("phone"),
                 lines,
                 null,
-                (String) body.getOrDefault("payMethod", "cod"),
+                firstStr(body, "cod", "payMethod", "paymentMethod"),
                 null,
                 (String) body.get("shippingAddress"),
                 (String) body.get("billingAddress"),
-                (String) body.get("notes"),
-                "storefront",
-                (String) body.get("discountCode"),
+                firstStr(body, null, "notes", "note"),
+                "manual",
+                firstStr(body, null, "discountCode", "code"),
                 (String) body.get("giftCode"),
                 null);
         return toFrontend(orderService.create(req));
+    }
+
+    /** First non-blank String among the given keys, or the fallback when none is set. */
+    private static String firstStr(Map<String, Object> body, String fallback, String... keys) {
+        for (String k : keys) {
+            Object v = body.get(k);
+            if (v instanceof String s && !s.isBlank()) return s;
+        }
+        return fallback;
     }
 
     @PatchMapping("/{id}")
@@ -161,6 +240,9 @@ public class StoreOrderController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", o.getId());
         m.put("code", "#" + o.getOrderNumber());
+        // The list used to send no customerId, so the frontend showed "-" for every
+        // customer. Walk-in orders have no customer row.
+        m.put("customerId", o.getCustomer() != null ? o.getCustomer().getId().toString() : "walkin");
         m.put("pay", mapPay(o.getFinancialStatus()));
         m.put("ful", mapFul(o.getFulfillmentStatus()));
         m.put("createdAt", o.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli());

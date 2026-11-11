@@ -36,6 +36,14 @@ public class StoreProductController {
         return page.items().stream().map(this::toFrontend).collect(Collectors.toList());
     }
 
+    /** Exact summary counts for the Products page — not limited to the 100-row list page. */
+    @GetMapping("/counts")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
+    public Map<String, Object> counts(@PathVariable String storeId) {
+        scope.require(storeId);
+        return new LinkedHashMap<>(catalogService.productCounts());
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
     public Map<String, Object> get(@PathVariable String storeId, @PathVariable Long id) {
