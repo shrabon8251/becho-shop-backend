@@ -1,12 +1,16 @@
 # Default profile — override secrets via environment variables, never commit them.
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:9090}
 
 
 spring:
   application:
     name: becho-saas
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/becho?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8&allowPublicKeyRetrieval=true}
     username: ${DB_USER:becho_app}
@@ -132,5 +136,6 @@ billing:
     bkash: ${MERCHANT_BKASH:}
     nagad: ${MERCHANT_NAGAD:}
     rocket: ${MERCHANT_ROCKET:}
+
 
 

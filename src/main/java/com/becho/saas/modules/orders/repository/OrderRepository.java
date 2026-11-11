@@ -9,15 +9,15 @@ import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
-  Optional<Order> findByIdAndStoreIdAndDeletedAtIsNull(Long id, Long storeId);
+    Optional<Order> findByIdAndStoreIdAndDeletedAtIsNull(Long id, Long storeId);
 
-  @Query("""
+    @Query("""
       SELECT o FROM Order o LEFT JOIN FETCH o.lines
       WHERE o.id = :id AND o.store.id = :storeId AND o.deletedAt IS NULL
       """)
-  Optional<Order> findWithLines(Long id, Long storeId);
+    Optional<Order> findWithLines(Long id, Long storeId);
 
-  @Query("""
+    @Query("""
       SELECT o FROM Order o
       WHERE o.store.id = :storeId AND o.deletedAt IS NULL
         AND (:financial IS NULL OR o.financialStatus = :financial)
@@ -25,7 +25,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
              OR (o.createdAt = :cursorAt AND o.id < :cursorId))
       ORDER BY o.createdAt DESC, o.id DESC
       """)
-  List<Order> findPage(Long storeId, String financial,
-                       LocalDateTime cursorAt, Long cursorId,
-                       org.springframework.data.domain.Limit limit);
+    List<Order> findPage(Long storeId, String financial,
+                         LocalDateTime cursorAt, Long cursorId,
+                         org.springframework.data.domain.Limit limit);
+
+    /** Converted orders in a window: paid or refunded (a real purchase either way). */
+    @Query("""
+      SELECT COUNT(o) FROM Order o
+      WHERE o.store.id = :storeId AND o.deletedAt IS NULL
+        AND o.financialStatus IN ('paid', 'refunded')
+        AND o.createdAt BETWEEN :from AND :to
+      """)
+    long countConvertedOrders(Long storeId, LocalDateTime from, LocalDateTime to);
 }

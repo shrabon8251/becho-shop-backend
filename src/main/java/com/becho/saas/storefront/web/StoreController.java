@@ -141,8 +141,22 @@ public class StoreController {
         Store s = stores.findById(StoreScope.lid(id)).orElseThrow(() -> ApiException.notFound("Store"));
         if (body.get("name") != null) s.setName((String) body.get("name"));
         if (body.get("currency") != null) s.setCurrency((String) body.get("currency"));
+        if (body.get("logoUrl") != null) s.setLogoUrl(validateLogoUrl(String.valueOf(body.get("logoUrl"))));
         stores.save(s);
         return toFrontend(s);
+    }
+
+    /** Logo must be an https URL from our own storage (or empty to clear it).
+     *  Rejects javascript:/data: URLs and over-long values — the URL is
+     *  rendered as an <img src> in the admin sidebar, so it must never be
+     *  an attacker-controlled scheme. */
+    private static String validateLogoUrl(String v) {
+        String url = v == null ? "" : v.trim();
+        if (url.isEmpty()) return null;
+        if (url.length() > 512 || !url.startsWith("https://")) {
+            throw ApiException.badRequest("INVALID_LOGO_URL", "Logo must be an https URL (or empty to remove it)");
+        }
+        return url;
     }
 
     @DeleteMapping("/{id}")
@@ -173,6 +187,7 @@ public class StoreController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getId().toString());
         m.put("name", s.getName());
+        m.put("logoUrl", s.getLogoUrl());
         m.put("sub", s.getSubdomain());
         m.put("currency", s.getCurrency() != null ? s.getCurrency() : "BDT");
         // Frontend Store shape: {id, name, sub, plan, status, currency, createdAt, gmv, invoices, ...}.

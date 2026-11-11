@@ -1,6 +1,7 @@
 package com.becho.saas.storefront.web;
 
 import com.becho.saas.common.ApiException;
+import com.becho.saas.modules.customers.repository.CustomerRepository;
 import com.becho.saas.modules.customers.service.CustomerService;
 import com.becho.saas.modules.customers.web.CustomerDtos.CreateCustomerRequest;
 import com.becho.saas.modules.customers.web.CustomerDtos.CustomerDto;
@@ -22,12 +23,25 @@ public class StoreCustomerController {
 
     private final CustomerService customerService;
     private final WalletService walletService;
+    private final CustomerRepository customers;
     private final StoreScope scope;
 
-    public StoreCustomerController(CustomerService customerService, WalletService walletService, StoreScope scope) {
+    public StoreCustomerController(CustomerService customerService, WalletService walletService,
+                                   CustomerRepository customers, StoreScope scope) {
         this.customerService = customerService;
         this.walletService = walletService;
+        this.customers = customers;
         this.scope = scope;
+    }
+
+    /** Total customers for the dashboard card — a count, not a full list. */
+    @GetMapping("/count")
+    @PreAuthorize("hasAnyRole('OWNER','ADMIN','STAFF','SUPPORT')")
+    public Map<String, Object> count(@PathVariable String storeId) {
+        Long sid = scope.require(storeId);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("count", customers.countByStoreIdAndDeletedAtIsNull(sid));
+        return m;
     }
 
     @GetMapping

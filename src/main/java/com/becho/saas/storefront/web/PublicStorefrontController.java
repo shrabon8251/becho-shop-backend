@@ -1,12 +1,16 @@
 package com.becho.saas.storefront.web;
 
 import com.becho.saas.common.ApiException;
+import com.becho.saas.modules.analytics.entity.StoreVisit;
+import com.becho.saas.modules.analytics.repository.StoreVisitRepository;
 import com.becho.saas.modules.catalog.service.CatalogService;
 import com.becho.saas.modules.platform.entity.Theme;
 import com.becho.saas.modules.platform.repository.ThemeRepository;
 import com.becho.saas.modules.settings.StoreSettingsCache;
+import com.becho.saas.modules.tenancy.entity.Store;
 import com.becho.saas.modules.tenancy.repository.StoreRepository;
 import com.becho.saas.tenancy.TenantContext;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +18,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +51,7 @@ public class PublicStorefrontController {
     private final com.becho.saas.modules.catalog.repository.BundleRepository bundles;
     private final com.becho.saas.modules.platform.repository.PageRepository pages;
     private final org.springframework.jdbc.core.JdbcTemplate jdbc;
+    private final StoreVisitRepository visits;
 
     public PublicStorefrontController(
             CatalogService catalogService,
@@ -54,7 +63,8 @@ public class PublicStorefrontController {
             com.becho.saas.modules.catalog.repository.CollectionRepository collections,
             com.becho.saas.modules.catalog.repository.BundleRepository bundles,
             com.becho.saas.modules.platform.repository.PageRepository pages,
-            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+            org.springframework.jdbc.core.JdbcTemplate jdbc,
+            StoreVisitRepository visits) {
         this.catalogService = catalogService;
         this.settingsCache = settingsCache;
         this.stores = stores;
@@ -65,6 +75,7 @@ public class PublicStorefrontController {
         this.bundles = bundles;
         this.pages = pages;
         this.jdbc = jdbc;
+        this.visits = visits;
     }
 
     /** Parses and validates the storeId from the URL (no JWT needed). */
@@ -78,6 +89,78 @@ public class PublicStorefrontController {
         } catch (NumberFormatException e) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STORE_ID", "Invalid store id: " + storeId);
         }
+    }
+
+    // ---------------------------------------------------------------- store info
+
+    /** Public store card for the storefront header: name + uploaded logo.
+     *  The logo lives on the Store (logo_url, Batch A) — this is the single
+     *  source of truth, so the header and the admin sidebar can never drift. */
+    @GetMapping
+    public Map<String, Object> store(@PathVariable String storeId) {
+        Long id = sid(storeId);
+        Store s = stores.findById(id).orElseThrow(() -> ApiException.notFound("Store"));
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", s.getId().toString());
+        m.put("name", s.getName());
+        m.put("subdomain", s.getSubdomain());
+        m.put("logoUrl", s.getLogoUrl());
+        m.put("currency", s.getCurrency() != null ? s.getCurrency() : "BDT");
+        return m;
+    }
+
+    // ---------------------------------------------------------------- visits (beacon)
+
+    /**
+     * Visitor beacon: POST /api/storefront/stores/{storeId}/visits.
+     * Records one row per (store, day, visitor) for the dashboard Conversion
+     * Rate card. The visitor is a SHA-256 hash of (IP + User-Agent + day) —
+     * the raw IP / User-Agent is never stored. Always 200: a duplicate visit
+     * or a storage hiccup must never break the shopper's page. Rate-limited
+     * with the other public storefront reads (120/min per IP).
+     */
+    @PostMapping("/visits")
+    public Map<String, Object> visit(@PathVariable String storeId, HttpServletRequest req) {
+        Long id = sid(storeId);
+        LocalDate today = LocalDate.now();
+        String hash = visitorHash(clientIp(req), req.getHeader("User-Agent"), today);
+        boolean recorded = false;
+        try {
+            if (!visits.existsByStoreIdAndVisitedDateAndVisitorHash(id, today, hash)) {
+                Store store = stores.getReferenceById(id);
+                StoreVisit v = new StoreVisit();
+                v.setStore(store);
+                v.setVisitedDate(today);
+                v.setVisitorHash(hash);
+                visits.save(v);
+                recorded = true;
+            }
+        } catch (Exception e) {
+            // Best-effort tracking: never fail the request (e.g. a race on
+            // the unique constraint just means the visit was already counted).
+            recorded = false;
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("recorded", recorded);
+        return m;
+    }
+
+    private static String visitorHash(String ip, String ua, LocalDate day) {
+        try {
+            String raw = (ip == null ? "" : ip) + "|" + (ua == null ? "" : ua) + "|" + day;
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(raw.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            return "unavailable";
+        }
+    }
+
+    /** First X-Forwarded-For entry when behind a proxy, else the remote address. */
+    private static String clientIp(HttpServletRequest req) {
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) return xff.split(",")[0].trim();
+        return req.getRemoteAddr();
     }
 
     // ---------------------------------------------------------------- products
